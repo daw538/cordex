@@ -1,34 +1,32 @@
 # Code by Daniel Williams (Jul 2020)
 
 import numpy as np
-import matplotlib.pyplot as plt
 import netCDF4 as nc4
-from mpl_toolkits.basemap import Basemap#, addcyclic, shiftgrid
 import glob
 import os
 import tqdm
 import datetime as dtm
-
-#from matplotlib import rc
-#rc("font", family="sans", size=8)
 
 #%% Open CORDEX-SA Datasets
 
 os.chdir('/home/daniel/Documents/meteorology/m6')
 input_files = glob.glob('cordex/*.{}'.format('nc'))
 
+# Assign keys for automation of process
 CORDEX_SA_vals = [nc4.Dataset(f) for f in sorted(input_files)]
 CORDEX_SA_keys = ['81_85','86_90','91_95','96_00','01_05','06_10']
 CORDEX_SA_file = dict(zip(CORDEX_SA_keys, CORDEX_SA_vals))
 
+# Read netcdf file to get key coordinates
 CORDEX_SA_lat = CORDEX_SA_file['81_85'].variables['lat'][:]
 CORDEX_SA_lon = CORDEX_SA_file['81_85'].variables['lon'][:]
 CORDEX_time = [(CORDEX_SA_file[i].variables['time'][:]) for i in CORDEX_SA_keys]
 CORDEX_time = dict(zip(CORDEX_SA_keys, CORDEX_time))
 
 t0 = dtm.datetime.strptime('01/12/1949', '%d/%m/%Y')
-#dt = [(t0 + dtm.timedelta(days=int(np.floor(i)), hours=12)) for i in CORDEX_time[0]]
 
+# Check precipitation readings for each cell: assign non-physical values to 
+# np.nan and multiply by 86000 to convert units in CORDEX dataset to mm/day
 CORDEX_SA_prec, CORDEX_dts = [], []
 for idx, f in enumerate(CORDEX_SA_keys):
     dt = [(t0 + dtm.timedelta(days=int(np.floor(i)), 
@@ -45,10 +43,6 @@ for f in CORDEX_SA_vals:
     f.close()
 
 #%% Define coarse analysis grid
-
-#cdx boundaries = [[-15.232, 45.25],[19.864, 115.53]]
-#imd boundaries = [[6.5,38.5],[66.5,100]]
-#phd boundaries = [[-13.8750,54.8750],[60.1250,149.8750]]
 india_lat = np.arange(6,39,1)
 india_lon = np.arange(67,100,1)
 offset = 0.5
@@ -135,7 +129,7 @@ def india_rain_day(file,t):
     return grid_avg_prec
 
 
-
+# Function to create new netcdf file with desired information
 def save_netcdf(file):
     try: ncfile.close()
     except: pass
@@ -170,131 +164,19 @@ def save_netcdf(file):
     ncfile.close()
 #%%
 cdx_midpts = grid_midpoints(CORDEX_SA_lat,CORDEX_SA_lon)
-#np.savetxt('cdxmpts.csv', cdx_midpts, delimiter=',')
-
-# Accessing binary array for a big grid cell
-#print(ingrid[m,n,:,:])
 
 ingrid_idx = whichcell(cdx_midpts, india_lat, india_lon)
 ingrid_idx = np.asarray(ingrid_idx)  
 
 #%%
 
-#file_key = '06_10'
-
+# Do the heavy lifting and create the new file
 for file_key in CORDEX_SA_keys:
     india_rain = [india_rain_day(file_key,t) for t in 
                   tqdm.tqdm(range(len(CORDEX_dts[file_key])))]
     india_rain_arr = np.asarray(india_rain)    
     
     save_netcdf(file_key)
-
-
-
-
-#%%
-
-#%% Testing plot
-import itertools
-#import matplotlib.animation as anim
-colours = itertools.cycle(('C2','k','C1',))
-# Define basemap extents
-llon = 60
-ulon = 110
-llat = 0
-ulat = 45
-m = Basemap(llcrnrlon = llon, llcrnrlat = llat,
-            urcrnrlon = ulon, urcrnrlat = ulat,
-            resolution='l', projection='cyl')
-
-fig, ax = plt.subplots(figsize=(8,8))
-ax.set_aspect('equal')
-#print(len(np.arange(67.5,99,1)))
-#x, y = m(np.arange(67.5,99,1), np.arange(6.5,38,1))
-x, y = np.meshgrid(np.arange(67.5,99,1), np.arange(6.5,38,1))
-#x, y = np.meshgrid(india_lon, india_lat)
-m.contourf(x, y, india_rain_arr[0,:,:], cmap='Blues')
-
-#plt.scatter(cdx_midpts[:,:,1],cdx_midpts[:,:,0],
-#               c=gg, cmap='Blues', s=1, vmin=-1, vmax=2)
-'''
-for i in ingrid_idx:
-    for j in i:
-        colour = next(colours)
-        ax.scatter(cdx_midpts[j[:,0],j[:,1],dlon],
-                   cdx_midpts[j[:,0],j[:,1],dlat],
-                   s=4, color=colour, alpha=0.5)
-
-for i in range(len(india_lat)):
-    ax.axhline(india_lat[i], color='lightgrey', linewidth=1)
-    ax.axvline(india_lon[i], color='lightgrey', linewidth=1)
-'''
-m.drawmeridians(np.arange(67, 100, 8), linewidth=0.5, dashes=[4, 2],
-                labels=[0,0,0,1], color='dimgrey')
-m.drawparallels(np.arange(6, 39, 8), linewidth=0.5, dashes=[4, 2],
-                labels=[1,0,0,1], color='dimgrey')
-m.drawcountries(color='k', linewidth=1, zorder=5)
-m.drawcoastlines(linewidth=1, zorder=5)
-m.drawmapboundary()
-
-plt.xlim([llon,ulon])
-plt.ylim([llat,ulat])
-#plt.savefig('cordex_inbiggrid.png', bbox_inches='tight', dpi=200)
-plt.show()
-
-
-#%% Testing plot
-import matplotlib.animation as anim
-import datetime as dtm
-# Define basemap extents
-llon = 67
-ulon = 99
-llat = 6
-ulat = 38
-m = Basemap(llcrnrlon = llon, llcrnrlat = llat,
-            urcrnrlon = ulon, urcrnrlat = ulat,
-            resolution='l', projection='cyl')
-
-fig, ax = plt.subplots(figsize=(5,5))
-ax.set_aspect('equal')
-
-x, y = np.meshgrid(np.arange(67.5,99,1), np.arange(6.5,38,1))
-
-cvals = np.arange(1,101,10)
-cont = m.contourf(x, y, india_rain_arr[11,:,:], levels=10, vmin=2, vmax=60, cmap='Blues')
-
-m.drawmeridians(np.arange(67, 100, 8), linewidth=0.5, dashes=[4, 2],
-                labels=[0,0,0,1], color='dimgrey')
-m.drawparallels(np.arange(6, 39, 8), linewidth=0.5, dashes=[4, 2],
-                labels=[1,0,0,1], color='dimgrey')
-m.drawcountries(color='k', linewidth=1, zorder=5)
-m.drawcoastlines(linewidth=1, zorder=5)
-m.drawmapboundary()
-
-#plt.xlim([llon,ulon])
-#plt.ylim([llat,ulat])
-#plt.savefig('cordex_inbiggrid.png', bbox_inches='tight', dpi=200)
-
-dt_start = "01/12/1949"
-t0 = dtm.datetime.strptime(dt_start, "%m/%d/%Y")
-
-def animate(i):
-    if i<12:
-        global cont
-        z = india_rain_arr[i,:,:]
-        for c in cont.collections:
-            c.remove()
-        cont = m.contourf(x,y,z, levels=10, vmin=2, vmax=60, cmap='Blues')
-        dt = (t0 + dtm.timedelta(days=int(np.floor(CORDEX_time[0][i])), hours=12))
-        plt.title(f'{dt.strftime("%d/%m/%Y")}')
-        #print(i, dt)
-        return cont
-
-
-
-movie = anim.FuncAnimation(fig, animate, frames=len(india_rain_arr), repeat=False)
-#movie.save('animation.mp4', writer=anim.FFMpegWriter())
-#plt.show()
 
 
 
